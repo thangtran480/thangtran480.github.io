@@ -1,0 +1,103 @@
+@startuml
+autonumber
+skinparam ParticipantPadding 40
+skinparam BoxPadding 10
+
+title Đăng ký sửa đổi tài khoản eFAST online
+hide footbox
+
+actor USER
+participant REGISTER_WEB
+participant REGISTER_SERIVCE
+participant MICRO_REGISTER
+participant DB_EFAST
+participant XES_MSA
+participant ECM
+participant REDIS
+
+== Luồng Đăng ký tài khoản ==
+activate REGISTER_WEB
+USER -> REGISTER_WEB: Chọn Đăng ký eFAST online
+USER -> REGISTER_WEB: Cắm USB CKS
+USER -> REGISTER_WEB: Nhập thông tin doanh nghiệp
+REGISTER_WEB -> REGISTER_SERIVCE: Kiểm tra thông tin Doanh nghiệp 
+activate REGISTER_SERIVCE
+REGISTER_SERIVCE -> MICRO_REGISTER: Kiểm tra thông tin Doanh nghiệp
+activate MICRO_REGISTER
+MICRO_REGISTER -> DB_EFAST: Kiểm tra thông tin Doanh nghiệp 
+activate DB_EFAST
+DB_EFAST --> MICRO_REGISTER: response
+
+alt Có hồ sơ đăng ký
+MICRO_REGISTER --> REGISTER_SERIVCE: Thông tin đang đăng ký
+REGISTER_SERIVCE --> REGISTER_WEB: Thông tin đang đăng ký
+REGISTER_WEB --> USER: Thông tin đang đăng ký
+else Chưa có tài khoản eFAST
+MICRO_REGISTER -> REDIS: Truy vấn thông tin doanh nghiệp
+MICRO_REGISTER -> XES_MSA: Truy vấn thông tin doanh nghiệp
+activate XES_MSA
+XES_MSA -> MICRO_REGISTER: response
+MICRO_REGISTER --> MICRO_REGISTER: Compare thông tin
+note right of MICRO_REGISTER: So sánh thông tin MST từ core và MST trên CKS
+    alt Đã tồn tại cif
+    MICRO_REGISTER -> REDIS: Lưu thông tin
+    MICRO_REGISTER --> REGISTER_SERIVCE: response
+    REGISTER_SERIVCE --> REGISTER_WEB: response
+    REGISTER_WEB --> USER: response
+    else Chưa tồn tại cif
+    MICRO_REGISTER --> REGISTER_SERIVCE: Lỗi chưa tồn tại tài khoản
+    REGISTER_SERIVCE --> REGISTER_WEB: Lỗi chưa tồn tại tài khoản
+    REGISTER_WEB --> USER: Lỗi chưa tồn tại tài khoản
+    end
+
+else Có tài khoản eFAST
+MICRO_REGISTER --> REGISTER_SERIVCE: Lỗi đã tồn tại tài khoản
+REGISTER_SERIVCE --> REGISTER_WEB: Lỗi đã tồn tại tài khoản
+REGISTER_WEB --> USER: Lỗi đã tồn tại tài khoản
+end
+
+USER -> REGISTER_WEB: Xác nhận và tiếp tục
+REGISTER_WEB -> REGISTER_SERIVCE: Truy vấn thông tin doanh nghiệp
+REGISTER_SERIVCE -> MICRO_REGISTER: Truy vấn thông tin doanh nghiệp
+MICRO_REGISTER -> XES_MSA: Truy vấn thông tin doanh nghiệp
+note right of MICRO_REGISTER: Truy vấn thông tin Tài khoản thanh toán, danh sách user gắn kèm
+XES_MSA --> MICRO_REGISTER: response
+MICRO_REGISTER --> REGISTER_SERIVCE: response
+REGISTER_SERIVCE --> REGISTER_WEB: response
+REGISTER_WEB --> USER: response
+
+REGISTER_WEB -> REGISTER_SERIVCE: Truy vấn metadata
+REGISTER_SERIVCE -> MICRO_REGISTER: Truy vấn metadata
+MICRO_REGISTER -> DB_EFAST: Truy vấn metadata
+note right of MICRO_REGISTER: Truy vấn thông tin chi nhánh, gói sản phẩm
+DB_EFAST --> MICRO_REGISTER: response
+MICRO_REGISTER --> REGISTER_SERIVCE: response
+REGISTER_SERIVCE --> REGISTER_WEB: response
+REGISTER_WEB --> USER: response
+
+
+USER -> REGISTER_WEB: Submit đăng ký
+REGISTER_WEB -> REGISTER_SERIVCE: API đăng ký
+REGISTER_SERIVCE -> MICRO_REGISTER: API đăng ký
+MICRO_REGISTER -> DB_EFAST: Lưu thông tin đăng ký 
+note right of DB_EFAST: Lưu thông tin trạng thái Khởi tạo
+MICRO_REGISTER -> ECM: Lưu thông tin file CCCD user
+MICRO_REGISTER -> MICRO_REGISTER: Gen Giấy đề nghị
+MICRO_REGISTER --> REGISTER_SERIVCE: response
+REGISTER_SERIVCE --> REGISTER_WEB: response
+REGISTER_WEB --> USER: response
+
+USER -> REGISTER_WEB: Ký giấy đề nghị
+REGISTER_WEB -> REGISTER_SERIVCE: Ký giấy đề nghị
+REGISTER_SERIVCE -> MICRO_REGISTER: Ký giấy đề nghị
+MICRO_REGISTER -> ECM: Lưu giấy đề nghị
+MICRO_REGISTER -> DB_EFAST: Lưu trạng thái đã ký số
+MICRO_REGISTER --> REGISTER_SERIVCE: response
+REGISTER_SERIVCE --> REGISTER_WEB: response
+deactivate REGISTER_SERIVCE
+REGISTER_WEB --> USER: response
+deactivate REGISTER_WEB
+
+== Luồng phê duyệt in==
+
+@enduml
